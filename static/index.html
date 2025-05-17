@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Agastyaa - AI Astrology</title>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background-color: #2d2d2d;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-text {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header-text h1 {
+            color: #2E8BFF;
+            font-size: 28px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .header-text p {
+            color: #999999;
+            font-size: 14px;
+            line-height: 1.5;
+            margin: 10px 0;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #cccccc;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #404040;
+            border-radius: 6px;
+            background-color: #333333;
+            color: #ffffff;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        input:focus, select:focus {
+            border-color: #2E8BFF;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(46, 139, 255, 0.2);
+        }
+
+        button {
+            background-color: #2E8BFF;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #1E6EBF;
+        }
+
+        .coordinates-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        #place {
+            flex-grow: 1;
+        }
+
+        .submit-btn {
+            width: 100%;
+            margin-top: 20px;
+            padding: 15px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header-text">
+            <h1>ASTROLOGY RULES ANALYZED</h1>
+            <p>Ask anything, let<br>Agastyaa answer</p>
+            <p>Agastyaa leverages the power of AI to personalise the astrology experience for you.</p>
+            <p>Agastyaa can answer all questions related to your life such as relationships, career, education, health and so on.</p>
+        </div>
+
+        <form id="birthForm" onsubmit="event.preventDefault(); submitForm()">
+            <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" id="name" required>
+            </div>
+
+            <div class="form-group">
+                <label>Date of Birth</label>
+                <input type="date" id="dob" required>
+            </div>
+
+            <div class="form-group">
+                <label>Time of Birth (HH:MM:SS AM/PM)</label>
+                <input type="text" id="tob" placeholder="Example: 11:40:00 PM" required>
+            </div>
+
+            <div class="form-group">
+                <label>Place of Birth</label>
+                <div class="coordinates-group">
+                    <input type="text" id="place" required>
+                    <button type="button" onclick="getCoordinates()">Get Coordinates</button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Latitude</label>
+                <input type="number" step="any" id="lat" required>
+            </div>
+
+            <div class="form-group">
+                <label>Longitude</label>
+                <input type="number" step="any" id="lon" required>
+            </div>
+
+            <div class="form-group">
+                <label>Gender</label>
+                <select id="gender" required>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+
+            <button type="submit" class="submit-btn">Generate Astrology Parameters</button>
+        </form>
+    </div>
+
+    <script>
+        function getCoordinates() {
+            const place = document.getElementById('place').value;
+            if (!place) return alert('Please enter a place name');
+            
+            // Replace with your geocoding service
+            fetch(`https://geocode.maps.co/search?q=${encodeURIComponent(place)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        document.getElementById('lat').value = data[0].lat;
+                        document.getElementById('lon').value = data[0].lon;
+                    }
+                });
+        }
+
+        function submitForm() {
+            const formData = {
+                name: document.getElementById('name').value,
+                dob: document.getElementById('dob').value,
+                tob: document.getElementById('tob').value,
+                lat: parseFloat(document.getElementById('lat').value),
+                lon: parseFloat(document.getElementById('lon').value),
+                gender: document.getElementById('gender').value
+            };
+
+            // Time conversion
+            const [time, modifier] = formData.tob.split(' ');
+            let [hours, minutes] = time.split(':');
+            if (modifier === 'PM' && hours !== '12') hours = parseInt(hours) + 12;
+            if (modifier === 'AM' && hours === '12') hours = '00';
+            
+            const params = {
+                dob: new Date(formData.dob).toLocaleDateString('en-US'),
+                tob: `${hours}:${minutes}`,
+                lat: formData.lat,
+                lon: formData.lon,
+                tz: null,  // To be calculated in backend
+                api_key: 'your_api_key_here',
+                lang: 'en'
+            };
+
+            fetch('/generate-params', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(params)
+            })
+            .then(response => response.json())
+            .then(data => {
+    if (data.status === "success") {
+        const message = `Parameters saved to: ${data.filepath}\n\n` +
+                        JSON.stringify(data.params, null, 2);
+        alert(message);
+        console.log('Generated params:', data.params);
+    } else {
+        alert('Error: ' + data.message);
+    }
+});
+        }
+    </script>
+</body>
+</html>
