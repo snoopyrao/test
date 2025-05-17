@@ -1,8 +1,19 @@
 import re
+import json
+import os
+import logging
 from datetime import datetime
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger('KPAnalysis')
 
 class KPAstrologyCleaner:
     def __init__(self):
+        self.logger = logging.getLogger('KPCleaner')
         self.parsed_data = {
             'dasha': {
                 'mahadasha': {},
@@ -16,25 +27,36 @@ class KPAstrologyCleaner:
         }
 
     def clean_data(self, files_content):
-        for file_type, content in files_content.items():
-            if file_type == 'mahadasha':
-                self._parse_mahadasha(content)
-            elif file_type == 'antardasha':
-                self._parse_antardasha(content)
-            elif file_type == 'paryantardasha':
-                self._parse_paryantardasha(content)
-            elif file_type in ['planet_position', 'planet_analysis']:  # Combined handling
-                self._parse_planets(content)
-            elif file_type == 'house_analysis':
-                self._parse_houses(content)
-            elif file_type == 'yoga_details':
-                self._parse_yogas(content)
+        try:
+            for file_type, content in files_content.items():
+                if not content:
+                    raise ValueError(f"Empty content for {file_type}")
+                    
+                self.logger.info(f"Processing {file_type} data")
                 
-        return self._consolidate_data()
+                if file_type == 'mahadasha':
+                    self._parse_mahadasha(content)
+                elif file_type == 'antardasha':
+                    self._parse_antardasha(content)
+                elif file_type == 'paryantardasha':
+                    self._parse_paryantardasha(content)
+                elif file_type in ['planet_position', 'planet_analysis']:
+                    self._parse_planets(content)
+                elif file_type == 'house_analysis':
+                    self._parse_houses(content)
+                elif file_type == 'yoga_details':
+                    self._parse_yogas(content)
+                    
+            return self._consolidate_data()
+            
+        except Exception as e:
+            self.logger.error(f"Cleaning failed: {str(e)}")
+            raise
 
     def _parse_mahadasha(self, content):
         current_section = None
         for line in content.split('\n'):
+            line = line.strip()
             if 'Birth Dasa Period:' in line:
                 current_section = 'birth'
                 self.parsed_data['dasha']['mahadasha'][current_section] = {}
@@ -48,33 +70,35 @@ class KPAstrologyCleaner:
     def _parse_antardasha(self, content):
         current_mahadasha = None
         for line in content.split('\n'):
+            line = line.strip()
             if '✦' in line:
-                current_mahadasha = re.search(r"✦ (\w+) Mahadasha", line).group(1)
-                self.parsed_data['dasha']['antardasha'][current_mahadasha] = []
+                match = re.search(r"✦ (\w+) Mahadasha", line)
+                if match:
+                    current_mahadasha = match.group(1)
+                    self.parsed_data['dasha']['antardasha'][current_mahadasha] = []
             elif current_mahadasha and '-' in line:
-                entry = line.strip().split(':')
-                if len(entry) == 2:
-                    period, date = entry
+                parts = line.split(':', 1)
+                if len(parts) == 2:
+                    period, date = parts
                     self.parsed_data['dasha']['antardasha'][current_mahadasha].append({
                         'period': period.strip(),
                         'date': date.strip()
                     })
 
     def _parse_paryantardasha(self, content):
-        current_mahadasha = None
-        current_antardasha = None
+        current_key = None
         for line in content.split('\n'):
+            line = line.strip()
             if '✦' in line:
                 parts = line.split('>')
+                if len(parts) >= 2:
+                    current_key = '>'.join([p.strip() for p in parts[0].split('✦')[-1].split('>')])
+                    self.parsed_data['dasha']['paryantardasha'][current_key] = []
+            elif current_key and '-' in line:
+                parts = line.split(':', 1)
                 if len(parts) == 2:
-                    current_mahadasha, current_antardasha = [p.strip() for p in parts]
-                    key = f"{current_mahadasha}>{current_antardasha}"
-                    self.parsed_data['dasha']['paryantardasha'][key] = []
-            elif current_mahadasha and '-' in line:
-                entry = line.strip().split(':')
-                if len(entry) == 2:
-                    period, date = entry
-                    self.parsed_data['dasha']['paryantardasha'][key].append({
+                    period, date = parts
+                    self.parsed_data['dasha']['paryantardasha'][current_key].append({
                         'period': period.strip(),
                         'date': date.strip()
                     })
@@ -82,52 +106,86 @@ class KPAstrologyCleaner:
     def _parse_planets(self, content):
         current_planet = None
         for line in content.split('\n'):
+            line = line.strip()
             if '✦' in line:
-                current_planet = re.search(r"✦ (\w+)", line).group(1)
-                self.parsed_data['planets'][current_planet] = {}
+                match = re.search(r"✦ (\w+)", line)
+                if match:
+                    current_planet = match.group(1)
+                    self.parsed_data['planets'][current_planet] = {}
             elif current_planet and ':' in line:
                 key, val = [p.strip() for p in line.split(':', 1)]
-                key = key.replace('(', '').replace(')', '').strip()
+                key = key.replace('(', '').replace(')', '').strip().lower()
                 
-                # Handle both planet position and analysis formats
-                if 'House' in key:
+                if 'house' in key:
                     self.parsed_data['planets'][current_planet]['house'] = val.split()[0]
-                elif 'Nakshatra' in key:
+                elif 'nakshatra' in key:
                     self.parsed_data['planets'][current_planet]['nakshatra'] = val.split('(')[0].strip()
-                elif 'Lord' in key:
+                elif 'lord' in key:
                     self.parsed_data['planets'][current_planet]['lord'] = val.split('-')[-1].strip()
-                elif 'Retrograde' in key:
+                elif 'retrograde' in key:
                     self.parsed_data['planets'][current_planet]['retrograde'] = val.strip()
-                elif 'Combust' in key:
+                elif 'combust' in key:
                     self.parsed_data['planets'][current_planet]['combust'] = val.strip()
-                elif 'Sublord Chain' in key:
+                elif 'sublord' in key:
                     self.parsed_data['planets'][current_planet]['sublord'] = val.strip()
 
     def _parse_houses(self, content):
         current_house = None
         for line in content.split('\n'):
+            line = line.strip()
             if 'Bhava ' in line:
-                current_house = re.search(r"Bhava (\d+)", line).group(1)
-                self.parsed_data['houses'][current_house] = []
+                match = re.search(r"Bhava (\d+)", line)
+                if match:
+                    current_house = match.group(1)
+                    self.parsed_data['houses'][current_house] = []
             elif current_house and '✦' in line:
-                planet = re.search(r"✦ (\w+)", line).group(1)
-                self.parsed_data['houses'][current_house].append(planet)
+                match = re.search(r"✦ (\w+)", line)
+                if match:
+                    planet = match.group(1)
+                    self.parsed_data['houses'][current_house].append(planet)
 
     def _parse_yogas(self, content):
         current_yoga = {}
         for line in content.split('\n'):
-            if '✦' in line:
-                if current_yoga:
-                    self.parsed_data['yogas'].append(current_yoga)
-                current_yoga = {
-                    'name': re.search(r"✦ (.*? Yoga)", line).group(1),
-                    'planets': [],
-                    'strength': None
-                }
-            elif 'Strength:' in line:
-                current_yoga['strength'] = line.split(':')[-1].strip()
-            elif 'Planets:' in line:
-                current_yoga['planets'] = [p.strip() for p in line.split(':')[-1].split(',')]
+            line = line.strip()
+            try:
+                if '✦' in line:
+                    # Handle previous yoga
+                    if current_yoga.get('name'):
+                        self.parsed_data['yogas'].append(current_yoga)
+                        
+                    # Match more flexible yoga patterns
+                    yoga_match = re.search(
+                        r"✦\s*([\w\s]+? Yoga(s?))\b", 
+                        line,
+                        re.IGNORECASE
+                    )
+                    if yoga_match:
+                        current_yoga = {
+                            'name': yoga_match.group(1).strip(),
+                            'planets': [],
+                            'strength': None
+                        }
+                    else:
+                        current_yoga = {}
+                        self.logger.warning(f"Skipping unparseable yoga line: {line}")
+                        
+                elif line.startswith('Strength:'):
+                    if current_yoga:
+                        current_yoga['strength'] = line.split(':')[-1].strip()
+                        
+                elif line.startswith('Planets:'):
+                    if current_yoga:
+                        planets = line.split(':')[-1].strip()
+                        current_yoga['planets'] = [p.strip() for p in planets.split(',') if p.strip()]
+                        
+            except Exception as e:
+                self.logger.error(f"Error parsing yoga line: {line} - {str(e)}")
+                continue
+                
+        # Add the last yoga
+        if current_yoga.get('name'):
+            self.parsed_data['yogas'].append(current_yoga)
 
     def _consolidate_data(self):
         output = ["=== Consolidated KP Astrology Analysis ==="]
@@ -152,10 +210,16 @@ class KPAstrologyCleaner:
         # Yogas
         output.append("\n3. SIGNIFICANT YOGAS")
         for yoga in self.parsed_data['yogas']:
-            if yoga['strength'] and float(yoga['strength'].replace('%', '')) > 80:
+            strength = 0
+            try:
+                strength = float(yoga.get('strength', '0%').replace('%', ''))
+            except ValueError:
+                pass
+                
+            if strength > 80:
                 output.append(
                     f"   - {yoga['name']}: {', '.join(yoga['planets'])} "
-                    f"(Strength: {yoga['strength']})"
+                    f"(Strength: {yoga.get('strength', 'Unknown')})"
                 )
 
         # Houses
@@ -176,31 +240,52 @@ def analyze_kp_charts(
     yoga_details_file: str,
     output_file: str = "consolidated_kp_analysis.txt"
 ):
-    """
-    Process KP astrology files and generate consolidated analysis
-    """
+    """Process KP astrology files and generate consolidated analysis"""
     def read_file(path):
         try:
             with open(path, 'r') as f:
-                return f.read()
+                content = f.read()
+                if not content.strip():
+                    raise ValueError(f"Empty file: {path}")
+                return content
         except FileNotFoundError:
-            print(f"Warning: File {path} not found. Skipping...")
-            return ''
+            raise FileNotFoundError(f"Critical file missing: {path}")
+        except Exception as e:
+            raise RuntimeError(f"Error reading {path}: {str(e)}")
 
-    files_content = {
-        'mahadasha': read_file(mahadasha_file),
-        'antardasha': read_file(antardasha_file),
-        'paryantardasha': read_file(paryantardasha_file),
-        'planet_position': read_file(planet_position_file),
-        'planet_analysis': read_file(planet_analysis_file),
-        'house_analysis': read_file(house_analysis_file),
-        'yoga_details': read_file(yoga_details_file)
-    }
+    try:
+        logger.info("Starting KP analysis")
+        
+        files_content = {
+            'mahadasha': read_file(mahadasha_file),
+            'antardasha': read_file(antardasha_file),
+            'paryantardasha': read_file(paryantardasha_file),
+            'planet_position': read_file(planet_position_file),
+            'planet_analysis': read_file(planet_analysis_file),
+            'house_analysis': read_file(house_analysis_file),
+            'yoga_details': read_file(yoga_details_file)
+        }
 
-    cleaner = KPAstrologyCleaner()
-    consolidated = cleaner.clean_data(files_content)
-    
-    with open(output_file, 'w') as f:
-        f.write(consolidated)
-    
-    return consolidated
+        cleaner = KPAstrologyCleaner()
+        consolidated = cleaner.clean_data(files_content)
+        
+        with open(output_file, 'w') as f:
+            f.write(consolidated)
+            
+        logger.info(f"Analysis saved to {output_file}")
+        return {
+            'status': 'success',
+            'output_file': output_file,
+            'generated_files': [
+                mahadasha_file, antardasha_file, paryantardasha_file,
+                planet_position_file, planet_analysis_file,
+                house_analysis_file, yoga_details_file
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Analysis failed: {str(e)}")
+        return {
+            'status': 'error',
+            'message': str(e)
+        }
