@@ -6,6 +6,15 @@ from kp_antardasha_parser import parse_kp_antardasha
 from kp_paryantardasha_parser import parse_kp_paryantardasha
 from kp_yoga_parser import parse_kp_yogas
 from kp_analyzer import analyze_kp_charts
+import os
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 def run_kp_analysis():
     """Main function to execute KP analysis workflow"""
@@ -17,77 +26,73 @@ def run_kp_analysis():
     }
 
     try:
-        # Define file paths
-        input_dir = 'user_data/'
-        output_dir = 'user_data/'
+        # Use absolute paths for production
+        base_dir = os.path.abspath(os.path.dirname(__file__))
+        input_dir = os.path.join(base_dir, 'user_data')
+        output_dir = os.path.join(base_dir, 'user_data')
         
-        # Step 1: Parse planet position details
-        planet_position_input = f"{input_dir}input_kp_planet_position_details.json"
-        planet_position_output = f"{output_dir}output_kp_planet_position_analysis.txt"
-        parse_kp_planet_details(planet_position_input, planet_position_output)
-        result['generated_files'].append(planet_position_output)
+        os.makedirs(input_dir, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
 
-        # Step 2: Parse KP House details
-        house_input = f"{input_dir}input_kp_house_details.json"
-        house_output = f"{output_dir}output_kp_house_analysis.txt"
-        house_analysis = get_kp_details(house_input, house_output)
-        if house_analysis.startswith("KP Analysis Error"):
-            raise Exception(house_analysis)
-        result['generated_files'].append(house_output)
+        # Define file paths with absolute paths
+        file_paths = {
+            'planet_position': ('input_kp_planet_position_details.json', 'output_kp_planet_position_analysis.txt'),
+            'house': ('input_kp_house_details.json', 'output_kp_house_analysis.txt'),
+            'planet': ('input_kp_planet_details.json', 'output_kp_planet_analysis.txt'),
+            'mahadasha': ('input_kp_mahadasha_details.json', 'output_kp_mahadasha_details.txt'),
+            'antardasha': ('input_kp_antardasha_details.json', 'output_kp_antardasha_details.txt'),
+            'paryantardasha': ('input_kp_paryantardasha_details.json', 'output_kp_paryantardasha_details.txt'),
+            'yoga': ('input_kp_list_of_yogas_details.json', 'output_kp_list_of_yogas_details.txt')
+        }
 
-        # Step 3: Parse KP Planet details
-        planet_input = f"{input_dir}input_kp_planet_details.json"
-        planet_output = f"{output_dir}output_kp_planet_analysis.txt"
-        get_kp_planets(planet_input, planet_output)
-        result['generated_files'].append(planet_output)
+        # Processing pipeline
+        processors = [
+            (parse_kp_planet_details, 'planet_position'),
+            (get_kp_details, 'house'),
+            (get_kp_planets, 'planet'),
+            (parse_kp_mahadasha, 'mahadasha'),
+            (parse_kp_antardasha, 'antardasha'),
+            (parse_kp_paryantardasha, 'paryantardasha'),
+            (parse_kp_yogas, 'yoga')
+        ]
 
-        # Step 4: Mahadasha parser
-        mahadasha_input = f"{input_dir}input_kp_mahadasha_details.json"
-        mahadasha_output = f"{output_dir}output_kp_mahadasha_details.txt"
-        parse_kp_mahadasha(mahadasha_input, mahadasha_output)
-        result['generated_files'].append(mahadasha_output)
-
-        # Step 5: Antardasha parser
-        antardasha_input = f"{input_dir}input_kp_antardasha_details.json"
-        antardasha_output = f"{output_dir}output_kp_antardasha_details.txt"
-        parse_kp_antardasha(antardasha_input, antardasha_output)
-        result['generated_files'].append(antardasha_output)
-
-        # Step 6: Paryantardasha
-        paryantardasha_input = f"{input_dir}input_kp_paryantardasha_details.json"
-        paryantardasha_output = f"{output_dir}output_kp_paryantardasha_details.txt"
-        parse_kp_paryantardasha(paryantardasha_input, paryantardasha_output)
-        result['generated_files'].append(paryantardasha_output)
-
-        # Step 7: List of Yogas
-        yoga_input = f"{input_dir}input_kp_list_of_yogas_details.json"
-        yoga_output = f"{output_dir}output_kp_list_of_yogas_details.txt"
-        parse_kp_yogas(yoga_input, yoga_output)
-        result['generated_files'].append(yoga_output)
+        for processor, key in processors:
+            input_file = os.path.join(input_dir, file_paths[key][0])
+            output_file = os.path.join(output_dir, file_paths[key][1])
+            
+            logger.info(f"Processing {key} with {input_file}")
+            
+            processor_result = processor(input_file, output_file)
+            if isinstance(processor_result, str) and processor_result.startswith("KP Analysis Error"):
+                raise Exception(processor_result)
+            
+            result['generated_files'].append(output_file)
 
         # Generate comprehensive analysis
-        final_output = f"{output_dir}output_kp_comprehensive_analysis.txt"
+        final_output = os.path.join(output_dir, 'output_kp_comprehensive_analysis.txt')
         analyze_kp_charts(
-            mahadasha_file=mahadasha_output,
-            antardasha_file=antardasha_output,
-            paryantardasha_file=paryantardasha_output,
-            planet_position_file=planet_position_output,
-            planet_analysis_file=planet_output,
-            house_analysis_file=house_output,
-            yoga_details_file=yoga_output,
+            mahadasha_file=os.path.join(output_dir, file_paths['mahadasha'][1]),
+            antardasha_file=os.path.join(output_dir, file_paths['antardasha'][1]),
+            paryantardasha_file=os.path.join(output_dir, file_paths['paryantardasha'][1]),
+            planet_position_file=os.path.join(output_dir, file_paths['planet_position'][1]),
+            planet_analysis_file=os.path.join(output_dir, file_paths['planet'][1]),
+            house_analysis_file=os.path.join(output_dir, file_paths['house'][1]),
+            yoga_details_file=os.path.join(output_dir, file_paths['yoga'][1]),
             output_file=final_output
         )
+        
         result['output_file'] = final_output
         result['generated_files'].append(final_output)
+        logger.info("Analysis completed successfully")
 
         return result
 
     except Exception as e:
+        logger.error(f"Analysis failed: {str(e)}")
         result['status'] = 'error'
         result['message'] = str(e)
         return result
 
-# For standalone execution
 if __name__ == '__main__':
     analysis_result = run_kp_analysis()
     if analysis_result['status'] == 'success':

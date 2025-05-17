@@ -6,13 +6,13 @@ import json
 from datetime import datetime
 import os
 import requests
-from main import run_kp_analysis  # Using direct function call instead of subprocess
+from main import run_kp_analysis  # Ensure this import works in production
 
 app = Flask(__name__, static_folder='static')
 CORS(app)
 
 # Configuration
-DATA_DIR = 'user_data'
+DATA_DIR = os.path.join(os.getcwd(), 'user_data')  # Explicit path for production
 API_ENDPOINTS = [
     {'url': 'https://api.vedicastroapi.com/v3-json/dashas/maha-dasha', 'filename': 'input_kp_mahadasha_details.json'},
     {'url': 'https://api.vedicastroapi.com/v3-json/dashas/antar-dasha', 'filename': 'input_kp_antardasha_details.json'},
@@ -75,7 +75,7 @@ def generate_params():
             'lat': data['lat'],
             'lon': data['lon'],
             'tz': offset,
-            'api_key': '6a799635-5162-574a-970e-5d3c931c6de6',  # Replace with actual API key
+            'api_key': os.environ.get('VEDIC_API_KEY', '6a799635-5162-574a-970e-5d3c931c6de6'),  # Use environment variable
             'lang': 'en'
         }
 
@@ -106,7 +106,9 @@ def generate_params():
         })
 
     except Exception as e:
+        app.logger.error(f"Error in generate-params: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080, debug=True)
+    port = int(os.environ.get("PORT", 8080))  # Render provides PORT environment variable
+    app.run(host='0.0.0.0', port=port, debug=False)  # Debug=False for production
