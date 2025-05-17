@@ -12,7 +12,7 @@ app = Flask(__name__, static_folder='static')
 CORS(app)
 
 # Configuration
-DATA_DIR = os.path.join(os.getcwd(), 'user_data')  # Explicit path for production
+DATA_DIR = os.path.join('/tmp', 'user_data')  # Explicit path for production
 API_ENDPOINTS = [
     {'url': 'https://api.vedicastroapi.com/v3-json/dashas/maha-dasha', 'filename': 'input_kp_mahadasha_details.json'},
     {'url': 'https://api.vedicastroapi.com/v3-json/dashas/antar-dasha', 'filename': 'input_kp_antardasha_details.json'},

@@ -2,6 +2,7 @@ flask
 timezonefinder
 pytz
 datetime
-flask_cors
+flask-cors
 requests
 gunicorn
+
